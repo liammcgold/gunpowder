@@ -10,6 +10,8 @@ from gunpowder.volume import VolumeTypes
 
 logger = logging.getLogger(__name__)
 
+
+#Randomly samples volumetrically
 class RandomLocation(BatchFilter):
     '''Choses a batch at a random location in the bounding box of the upstream 
     provider.

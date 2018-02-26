@@ -35,6 +35,8 @@ class BatchProvider(object):
         '''
         raise NotImplementedError("Class %s does not implement 'get_spec'"%type(self).__name__)
 
+
+    #
     def request_batch(self, request):
 
         logger.debug("%s got request %s"%(type(self).__name__,request))

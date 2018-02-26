@@ -14,6 +14,8 @@ class BatchRequest(Freezable):
 
         self.__center_rois()
 
+    #ROI is region of interest, a rectangular region
+
     def add_volume_request(self, volume_type, shape):
 
         self.volumes[volume_type] = Roi((0,)*len(shape), shape)
