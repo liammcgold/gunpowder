@@ -61,9 +61,9 @@ def train():
     # use the same network for training and prediction to share weights
 
     # TODO: implement same_process
-    train = Train(solver_parameters, same_process=True)
+    train = train(solver_parameters, same_process=True)
     # TODO: implement get_net()
-    predict = Predict(train.get_net(), same_process=True)
+    predict = predict(train.get_net(), same_process=True)
 
     batch_provider_tree = (
         data_sources +
