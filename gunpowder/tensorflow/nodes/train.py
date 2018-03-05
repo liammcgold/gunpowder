@@ -79,6 +79,8 @@ class Train(GenericTrain):
             summaries.
     '''
 
+
+    #takes file name for metagraph
     def __init__(
             self,
             meta_graph_filename,
