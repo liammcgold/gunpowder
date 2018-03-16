@@ -5,6 +5,8 @@ import numpy as np
 import random
 
 from gunpowder import *
+from gunpowder.contrib import ZeroOutConstSections
+
 
 def train():
 

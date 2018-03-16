@@ -28,11 +28,11 @@ def train():
     solver_parameters.train_state.add_stage('euclid')
 
     request = BatchRequest()
-    request.add_array_request(ArrayKeys.RAW, (84,268,268))
-    request.add_array_request(ArrayKeys.GT_LABELS, (56,56,56))
-    request.add_array_request(ArrayKeys.GT_MASK, (56,56,56))
-    request.add_array_request(ArrayKeys.GT_IGNORE, (56,56,56))
-    request.add_array_request(ArrayKeys.GT_AFFINITIES, (56,56,56))
+    request.add(ArrayKeys.RAW, (84,268,268))
+    request.add(ArrayKeys.GT_LABELS, (56,56,56))
+    request.add(ArrayKeys.GT_MASK, (56,56,56))
+    request.add(ArrayKeys.GT_IGNORE, (56,56,56))
+    request.add(ArrayKeys.GT_AFFINITIES, (56,56,56))
 
     data_sources = tuple(
         Hdf5Source(
@@ -45,8 +45,12 @@ def train():
         ) +
         Normalize() +
         RandomLocation()
-        for s in ['A', 'B', 'C']
+            for s in ['A', 'B', 'C']
     )
+
+
+    #artifcat source, not sure whats being imported but after its inmported its randomly sampled volumetrically, normalized,
+    #randomly augmented for intesity, elasticity and randomly mirrored and transposed
 
     artifact_source = (
         Hdf5Source(
@@ -103,3 +107,4 @@ def train():
 
 if __name__ == "__main__":
     train()
+
