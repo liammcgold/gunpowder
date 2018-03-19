@@ -38,20 +38,20 @@ def train():
 
     #batch request states what is to be contained in the batch that is requested
     request = BatchRequest()
-    request.add_volume_request(VolumeTypes.RAW, (84,268,268))
-    request.add_volume_request(VolumeTypes.GT_LABELS, (56,56,56))
-    request.add_volume_request(VolumeTypes.GT_MASK, (56,56,56))
-    request.add_volume_request(VolumeTypes.GT_IGNORE, (56,56,56))
-    request.add_volume_request(VolumeTypes.GT_AFFINITIES, (56,56,56))
+    request.add(ArrayKeys.RAW, (84,268,268))
+    request.add(ArrayKeys.GT_LABELS, (56,56,56))
+    request.add(ArrayKeys.GT_MASK, (56,56,56))
+    request.add(ArrayKeys.GT_IGNORE, (56,56,56))
+    request.add(ArrayKeys.GT_AFFINITIES, (56,56,56))
 
     #import data, normalize it, pick random volumes within it
     data_sources = tuple(
         Hdf5Source(
             'sample_'+s+'_padded_20160501.aligned.filled.cropped.hdf',
             datasets = {
-                VolumeTypes.RAW: 'volumes/raw',
-                VolumeTypes.GT_LABELS: 'volumes/labels/neuron_ids_notransparency',
-                VolumeTypes.GT_MASK: 'volumes/labels/mask',
+                ArrayKeys.RAW: 'volumes/raw',
+                ArrayKeys.GT_LABELS: 'volumes/labels/neuron_ids_notransparency',
+                ArrayKeys.GT_MASK: 'volumes/labels/mask',
             }
         ) +
         Normalize() +
@@ -63,15 +63,16 @@ def train():
 
     #atrifcat source, not sure whats being imported but after its inmported its randomly sampled volumetrically, normalized,
     #randomly augmented for intesity, elasticity and randomly mirrored and transposed
+
     artifact_source = (
         Hdf5Source(
             'sample_ABC_padded_20160501.defects.hdf',
             datasets = {
-                VolumeTypes.RAW: 'defect_sections/raw',
-                VolumeTypes.ALPHA_MASK: 'defect_sections/mask',
+                ArrayKeys.RAW: 'defect_sections/raw',
+                ArrayKeys.ALPHA_MASK: 'defect_sections/mask',
             }
         ) +
-        RandomLocation(min_masked=0.05, mask_volume_type=VolumeTypes.ALPHA_MASK) +
+        RandomLocation(min_masked=0.05, mask_array_key=ArrayKeys.ALPHA_MASK) +
         Normalize() +
         IntensityAugment(0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
         ElasticAugment([4,40,40], [0,2,2], [0,math.pi/2.0]) +
@@ -84,7 +85,7 @@ def train():
 
     #Creates snapshots to be saved that contain LOSS_GRADIENT, this will be pulled from upstream provider
     snapshot_request = BatchRequest()
-    snapshot_request.add_volume_request(VolumeTypes.LOSS_GRADIENT, (56,56,56))
+    snapshot_request.add_array_request(ArrayKeys.LOSS_GRADIENT, (56,56,56))
 
 
 
@@ -111,7 +112,6 @@ def train():
         IntensityScaleShift(2,-1) +
         BalanceAffinityLabels() +
         PreCache(
-            request,
             cache_size=10,
             num_workers=5) +
         Train(solver_parameters, use_gpu=0) +
@@ -131,3 +131,4 @@ def train():
 
 if __name__ == "__main__":
     train()
+

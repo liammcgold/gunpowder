@@ -5,31 +5,26 @@ import numpy as np
 from .batch_filter import BatchFilter
 from gunpowder.roi import Roi
 from gunpowder.coordinate import Coordinate
-from gunpowder.volume import VolumeTypes
 
 logger = logging.getLogger(__name__)
 
 class Pad(BatchFilter):
-    '''Add a constant intensity padding around volumes of another batch 
+    '''Add a constant intensity padding around arrays of another batch 
     provider. This is useful if your requested batches can be larger than what 
     your source provides.
+
+    Args:
+
+        pad_sizes(dict, ArrayKey -> [None,Coordinate]): Specifies the padding
+            to be added to each array. If None, an infinite padding is added.
+            If a Coordinate, this amount will be added to the ROI in the
+            positive and negative direction.
+
+        pad_values(dict, ArrayKey -> value or None): The values to report 
+            inside the padding. If not given, 0 is used.
     '''
 
     def __init__(self, pad_sizes, pad_values=None):
-        '''
-        Args:
-
-            pad_sizes: dict, VolumeTypes -> [None,Coordinate]
-
-                Specifies the padding to be added to each volume type. If None, 
-                an infinite padding is added. If a Coordinate, this amount will 
-                be added to the ROI in the positive and negative direction.
-
-            pad_values: dict, VolumeTypes -> value or None
-
-                The values to report inside the padding. If not given, 0 is 
-                used.
-        '''
 
         self.pad_sizes = pad_sizes
         if pad_values is None:
@@ -39,55 +34,42 @@ class Pad(BatchFilter):
 
     def setup(self):
 
-        self.upstream_spec = self.get_upstream_provider().get_spec()
-        self.spec = copy.deepcopy(self.upstream_spec)
+        for (array_key, pad_size) in self.pad_sizes.items():
 
-        for (volume_type, pad_size) in self.pad_sizes.items():
+            assert array_key in self.spec, "Asked to pad %s, but is not provided upstream."%array_key
+            assert self.spec[array_key].roi is not None, "Asked to pad %s, but upstream provider doesn't have a ROI for it."%array_key
 
-            assert volume_type in self.spec.volumes, "Asked to pad %s, but is not provided upstream."%volume_type
-            assert self.spec.volumes[volume_type] is not None, "Asked to pad %s, but upstream provider doesn't have a ROI for it."%volume_type
-
+            spec = self.spec[array_key].copy()
             if pad_size is not None:
-                self.spec.volumes[volume_type] = self.upstream_spec.volumes[volume_type].grow(pad_size, pad_size)
-
-        logger.debug("upstream spec: " + str(self.upstream_spec))
-        logger.debug("provided spec:" + str(self.spec))
-
-    def get_spec(self):
-        return self.spec
+                spec.roi = spec.roi.grow(pad_size, pad_size)
+            else:
+                spec.roi.set_shape(None)
+            self.updates(array_key, spec)
 
     def prepare(self, request):
 
+        upstream_spec = self.get_upstream_provider().spec
+
         logger.debug("request: %s"%request)
-        logger.debug("upstream spec: %s"%self.upstream_spec)
+        logger.debug("upstream spec: %s"%upstream_spec)
 
-        # remember request
-        self.request = copy.deepcopy(request)
+        for array_key in self.pad_sizes.keys():
 
-        for volume_type in self.pad_sizes.keys():
-
-            if volume_type not in request.volumes:
+            if array_key not in request:
                 continue
-            roi = request.volumes[volume_type]
-
-            # check out-of-bounds
-            # TODO: this should be moved to super class, this should hold for any 
-            # batch provider
-            if self.pad_sizes[volume_type] is not None:
-                if not self.spec.volumes[volume_type].intersects(roi):
-                    raise RuntimeError("%s ROI %s lies outside of padded ROI %s"%(volume_type,roi,self.spec.volumes[volume_type]))
+            roi = request[array_key].roi
 
             # change request to fit into upstream spec
-            request.volumes[volume_type] = roi.intersect(self.upstream_spec.volumes[volume_type])
+            request[array_key].roi = roi.intersect(upstream_spec[array_key].roi)
 
-            if request.volumes[volume_type] is None:
+            if request[array_key].roi.empty():
 
-                logger.warning("Requested %s ROI lies entirely outside of upstream ROI."%volume_type)
+                logger.warning("Requested %s ROI lies entirely outside of upstream ROI."%array_key)
 
                 # ensure a valid request by asking for empty ROI
-                request.volumes[volume_type] = Roi(
-                        self.upstream_spec.volumes[volume_type].get_offset(),
-                        (0,)*self.upstream_spec.volumes[volume_type].dims()
+                request[array_key].roi = Roi(
+                        upstream_spec[array_key].roi.get_offset(),
+                        (0,)*upstream_spec[array_key].roi.dims()
                 )
 
         logger.debug("new request: %s"%request)
@@ -95,17 +77,22 @@ class Pad(BatchFilter):
     def process(self, batch, request):
 
         # restore requested batch size and ROI
-        for (volume_type, volume) in batch.volumes.items():
 
-            volume.data = self.__expand(
-                    volume.data,
-                    volume.roi,
-                    self.request.volumes[volume_type],
-                    self.pad_values[volume_type] if volume_type in self.pad_values else 0
+        for (array_key, array) in batch.arrays.items():
+
+            array.data = self.__expand(
+                    array.data,
+                    array.spec.roi/array.spec.voxel_size,
+                    request[array_key].roi/array.spec.voxel_size,
+                    self.pad_values[array_key] if array_key in self.pad_values else 0
             )
-            volume.roi = self.request.volumes[volume_type]
+            array.spec.roi = request[array_key].roi
+
+        for (points_key, points) in batch.points.items():
+            points.spec.roi = request[points_key].roi
 
     def __expand(self, a, from_roi, to_roi, value):
+        '''from_roi and to_roi should be in voxels.'''
 
         logger.debug("expanding array of shape %s from %s to %s"%(str(a.shape), from_roi, to_roi))
 

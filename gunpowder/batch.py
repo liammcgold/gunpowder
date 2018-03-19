@@ -7,7 +7,17 @@ from .profiling import ProfilingStats
 logger = logging.getLogger(__name__)
 
 class Batch(Freezable):
-    '''Contains the requested batch.
+    '''Contains data that is passed through the pipeline from sources to sinks.
+
+    Attributes:
+
+        arrays (dict from :class:`ArrayKey` to :class:`Array`):
+
+            Contains all arrays that have been requested for this batch.
+
+        points (dict from :class:`PointsKey` to :class:`Points`):
+
+            Contains all point sets that have been requested for this batch.
     '''
 
     __next_id = multiprocessing.Value('L')
@@ -23,7 +33,8 @@ class Batch(Freezable):
 
         self.id = Batch.get_next_id()
         self.profiling_stats = ProfilingStats()
-        self.volumes = {}
+        self.arrays = {}
+        self.points  = {}
         self.affinity_neighborhood = None
         self.loss = None
         self.iteration = None
@@ -31,19 +42,23 @@ class Batch(Freezable):
         self.freeze()
 
     def get_total_roi(self):
-        '''Get the union of all the volume ROIs in the batch.'''
+        '''Get the union of all the array ROIs in the batch.'''
 
         total_roi = None
-        for (volume_type, volume) in self.volumes.items():
-            if total_roi is None:
-                total_roi = volume.roi
-            else:
-                total_roi = total_roi.union(volume.roi)
+
+        for collection_type in [self.arrays, self.points]:
+            for (key, obj) in collection_type.items():
+                if total_roi is None:
+                    total_roi = obj.spec.roi
+                else:
+                    total_roi = total_roi.union(obj.spec.roi)
+
         return total_roi
 
     def __repr__(self):
 
         r = ""
-        for (volume_type, volume) in self.volumes.items():
-            r += "%s: %s\n"%(volume_type,volume.roi)
+        for collection_type in [self.arrays, self.points]:
+            for (key, obj) in collection_type.items():
+                r += "%s: %s\n"%(key, obj.spec)
         return r
