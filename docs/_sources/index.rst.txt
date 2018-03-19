@@ -11,6 +11,8 @@ Welcome to Gunpowder's Documentation!
   nodes
   volumes
   custom_providers
+  tutorial
+
 
 Indices and tables
 ==================

@@ -1,0 +1,95 @@
+.. _sec_tutorial:
+
+Tutorial
+==============================
+
+This tutorial will go through a bare bones implementation of gunpowder from data to training to
+prediction.
+
+
+Requirements
+------------
+
+In order to use the gunpowder library a couple data sources are needed. First is the volumetric
+image data. This data will be referred to as “raw”. Ground truths for this raw data will be
+required as well. This data should be prepared and stored in HDF5 format. Multiple volumes can
+be used at once but only one is required. A GPU is also required.
+
+
+Importing Data
+--------------
+The data must be imported to be used. This is done with the Hdf5Source function.
+This can be seen here:
+
+
+.. code-block:: python
+
+    #define
+    raw = ArrayKey('RAW')
+    labels = ArrayKey('GT_LABELS')
+
+    #create source
+    data_source=
+        Hdf5Source(
+            'FILE.hdf',
+            datasets = {
+               raw: 'volumes/raw',
+               labels: 'volumes/labels',
+            }
+        )
+
+
+
+Creating training pipeline and running it
+-----------------------------------------
+
+Now that the data has been imported the pipeline that will do the training must be defined.
+This will create a graph that the data will flow through. A typical training pipeline can include
+many nodes. This definition can be seen below:
+
+.. code-block:: python
+
+    training_pipeline = (
+        data_source+
+        RandomProvider()+
+        SimpleAugment(transpose_only_xy=True) +
+        Train(solver_parameters, use_gpu=0)
+    )
+
+This creates a simple pipeline that will take the data, select it at random, perform a simple augment
+on it and input it into the training network. Each iteration of this training will create a new
+network with updated weights. This will be used later to predict. To actually execute this pipeline
+the request must be defined. This is done below:
+
+.. code-block:: python
+
+    request = BatchRequest()
+    request.add_volume_request(VolumeType.RAW, (84,268,268))
+    request.add_volume_request(VolumeType.GT_LABELS, (56,56,56))
+    request.add_volume_request(VolumeType.GT_MASK, (56,56,56))
+
+This can then be used to perform training iterations, below is a run of 10 training iterations:
+
+.. code-block:: python
+
+    n=10
+    with build(training_pipeline) as minibatch_maker:
+        for i in range(n):
+            minibatch_maker.request_batch(request)
+
+
+
+TO DO
+
+-IMPLEMENT TF OR CAFFE SECTIONS
+
+-IMPLEMENT PREDICTION
+
+
+
+
+
+
+
+
+
