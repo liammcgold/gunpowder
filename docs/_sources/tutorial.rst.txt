@@ -41,11 +41,50 @@ This can be seen here:
 
 
 Creating training pipeline and running it
------------------------------------------
+--------------------------------------------
 
-Now that the data has been imported the pipeline that will do the training must be defined.
-This will create a graph that the data will flow through. A typical training pipeline can include
-many nodes. This definition can be seen below:
+
+
+
+
+
+Now that the data has been imported the pipeline that will do the training must be
+defined. This will create a graph that the data will flow through. Before defining
+this parameters for the network must be defined. For the caffe implementation this
+is done as follows:
+
+.. code-block:: python
+
+    #built in neighborhood function
+    affinity_neighborhood = malis.mknhood3d()
+
+
+    #initialize solver parameters for caffe
+    solver_parameters = SolverParameters()
+    solver_parameters.train_net = 'net.prototxt'
+    solver_parameters.base_lr = 1e-4
+    solver_parameters.momentum = 0.95
+    solver_parameters.momentum2 = 0.999
+    solver_parameters.delta = 1e-8
+    solver_parameters.weight_decay = 0.000005
+    solver_parameters.lr_policy = 'inv'
+    solver_parameters.gamma = 0.0001
+    solver_parameters.power = 0.75
+    solver_parameters.snapshot = 2000
+    solver_parameters.snapshot_prefix = 'net'
+    solver_parameters.type = 'Adam'
+    solver_parameters.resume_from = None
+    solver_parameters.train_state.add_stage('euclid')
+
+
+TO DO define tensorflow section
+
+
+
+
+
+A typical training pipeline can include many nodes linked together.
+A very simple implementation can be seen below:
 
 .. code-block:: python
 
@@ -68,7 +107,8 @@ the request must be defined. This is done below:
     request.add_volume_request(VolumeType.GT_LABELS, (56,56,56))
     request.add_volume_request(VolumeType.GT_MASK, (56,56,56))
 
-This can then be used to perform training iterations, below is a run of 10 training iterations:
+This can then be used to perform training iterations, below is a run of 10 training
+iterations:
 
 .. code-block:: python
 
@@ -78,10 +118,121 @@ This can then be used to perform training iterations, below is a run of 10 train
             minibatch_maker.request_batch(request)
 
 
+Make predictions
+----------------
+
+To make predictions simply use the trained network. The trained network from the
+previous step will be used to make new predictions from raw. The code to do this
+is as follows:
+
+
+.. code-block:: python
+
+    #####################################
+    # USE THIS FOR CAFFE IMPLEMENTATION #
+    #####################################
+
+
+    #we want the last itteration
+    iteration=n
+
+    #import the necessary data for the model
+    prototxt = 'net.prototxt'
+    weights  = 'net_iter_%d.caffemodel'%iteration
+
+    input_size = Coordinate((84,268,268))
+    output_size = Coordinate((56,56,56))
+
+    pipeline = (
+
+
+            #import
+            Hdf5Source(
+                    'sample_A_20160501.hdf',
+                    raw_dataset='volumes/raw') +
+
+
+            Normalize() +
+            Pad() +
+            IntensityScaleShift(2, -1) +
+            ZeroOutConstSections() +
+            Predict(prototxt, weights, use_gpu=0) +
+            Snapshot(
+                    every=1,
+                    output_dir=os.path.join('chunks', '%d'%iteration),
+                    output_filename='chunk.hdf'
+            ) +
+            PrintProfilingStats() +
+            Chunk(
+                    BatchSpec(
+                            input_size,
+                            output_size
+                    )
+            ) +
+            Snapshot(
+                    every=1,
+                    output_dir=os.path.join('processed', '%d'%iteration),
+                    output_filename='sample_A_20160501.hdf'
+            )
+    )
+
+
+
+    # request a "batch" of the size of the whole dataset
+    with build(pipeline) as p:
+        shape = p.get_spec().roi.get_shape()
+        p.request_batch(
+                BatchSpec(
+                        shape,
+                        shape - (input_size-output_size)
+                )
+        )
+
+
+
+Assuming the training was adequate this will create useful predictions.
+
+
+Docker usage
+------------
+
+Due to the compuational complexity of gunpowder it must be ran on a GPU. To do this
+a docker is used. This means to run the python script outlined in the previous
+section a shell script (.sh file) will be produced. This is fairly straightforward.
+Simply create a .sh file and insert the following text:
+
+
+.. code-block:: jcl
+
+    rm snapshots/*
+
+    export NAME=$(basename "$PWD")
+
+    nvidia-docker rm -f $NAME
+
+    NV_GPU=0 nvidia-docker run --rm \
+    -u `id -u $USER` \
+    -v $(pwd):/workspace \
+    -w /workspace \
+    --name $NAME \
+    funkey/gunpowder:latest \
+    python -u NAME_OF_FILE.py
+
+
+
+
+
+
 
 TO DO
 
--IMPLEMENT TF OR CAFFE SECTIONS
+-Implement TF
 
--IMPLEMENT PREDICTION
+
+
+
+
+
+
+
 
