@@ -1,0 +1,13 @@
+import h5py
+import code
+
+
+a = h5py.File('data.hdf')
+
+
+code.interact(local=locals())
+
+
+
+
+
