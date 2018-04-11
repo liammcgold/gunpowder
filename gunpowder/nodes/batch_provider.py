@@ -129,6 +129,8 @@ class BatchProvider(object):
             if key in request:
                 del request[key]
 
+
+    #
     def request_batch(self, request):
         '''Request a batch from this provider.
 

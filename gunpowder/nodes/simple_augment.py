@@ -7,6 +7,8 @@ from gunpowder.coordinate import Coordinate
 
 logger = logging.getLogger(__name__)
 
+
+#randomly mirrors and trasnposes
 class SimpleAugment(BatchFilter):
     '''Randomly mirror and transpose all :class:`Arrays<Array>` and
     :class:`Points` in a batch.

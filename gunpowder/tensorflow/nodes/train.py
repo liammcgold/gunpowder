@@ -6,6 +6,9 @@ from gunpowder.ext import tensorflow as tf
 from gunpowder.nodes.generic_train import GenericTrain
 from gunpowder.array import ArrayKey, Array
 
+
+import code
+
 logger = logging.getLogger(__name__)
 
 class Train(GenericTrain):
@@ -90,7 +93,9 @@ class Train(GenericTrain):
             summary=None,
             array_specs=None,
             save_every=2000,
-            log_dir='./'):
+            log_dir='./',
+            checkpoint_dir='./'
+            ):
 
         super(Train, self).__init__(
             inputs,
@@ -114,6 +119,7 @@ class Train(GenericTrain):
         self.iteration_increment = None
         self.summary_saver = None
         self.log_dir = log_dir
+        self.checkpoint_dir= checkpoint_dir
         if isinstance(optimizer, basestring):
             self.optimizer_loss_names = (optimizer, loss)
         else:
@@ -156,6 +162,7 @@ class Train(GenericTrain):
             'iteration': self.iteration_increment}
         to_compute.update(array_outputs)
 
+
         # compute outputs, gradients, and update variables
         if self.summary is not None:
             outputs, summaries = self.session.run([to_compute, self.summary], feed_dict=inputs)
@@ -171,18 +178,21 @@ class Train(GenericTrain):
 
         batch.loss = outputs['loss']
         batch.iteration = outputs['iteration'][0]
+
+
         if self.summary is not None:
             self.summary_saver.add_summary(summaries, batch.iteration)
 
         if batch.iteration%self.save_every == 0:
 
-            checkpoint_name = (
+            checkpoint_name = (self.checkpoint_dir+
                 self.meta_graph_filename +
                 '_checkpoint_%i'%batch.iteration)
 
             logger.info(
                 "Creating checkpoint %s",
                 checkpoint_name)
+
 
             self.full_saver.save(
                 self.session,
@@ -292,6 +302,7 @@ class Train(GenericTrain):
         for output_name, array_key in self.gradients.items():
             if array_key in request:
                 array_outputs[array_key] = self.tf_gradient[output_name]
+
 
         return array_outputs
 
