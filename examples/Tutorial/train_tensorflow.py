@@ -37,13 +37,13 @@ grad=gp.ArrayKey('gradient')
 
 
 #define training values
-input_shape=(30,95,95)
+input_shape=(60,400,400)
 voxel_size=(40,4,4)
 raw_tf = tf.placeholder(tf.float32, shape=input_shape)
 raw_batched = tf.reshape(raw_tf, (1, 1) + input_shape)
 
 #unet = mala.networks.unet(raw_batched, 12, 5, [[1,1,1],[2,4,4],[1,4,4]])
-unet = mala.networks.unet(raw_batched, 12, 5, [[1,1,1],[1,1,1],[1,1,1]])
+unet = mala.networks.unet(raw_batched, 1, 2, [[1,1,1],[1,1,1],[1,1,1]])
 
 
 
@@ -122,7 +122,8 @@ training_pipeline = (
         gp.tensorflow.Train('unet',
                             optimizer=optimizer.name,
                             loss=loss.name,
-                            save_every=10,
+                            save_every=100,
+                            checkpoint_dir="./checkpoints/",
                             inputs={
                                     raw_tf.name : raw,
                                     gt_labels.name : gt
@@ -140,7 +141,7 @@ training_pipeline = (
                     gt: 'volumes/gt',
                     grad: 'volumes/gradient',
                     prediction: 'volumes/prediction',
-        }, output_filename='batch_{id}.hdf', additional_request=snapshot_request)
+        }, output_filename='batch_{id}.hdf', additional_request=snapshot_request, every=100)
 )
 
 tf.reset_default_graph()
@@ -158,7 +159,7 @@ request.add(gt,(output_shape[0]*voxel_size[0],output_shape[1]*voxel_size[1],outp
 gp.set_verbose()
 
 #Execute train
-n=10
+n=1
 with gp.build(training_pipeline) as minibatch_maker:
     for i in range(n):
         minibatch_maker.request_batch(request)
@@ -244,4 +245,7 @@ with build(prediction_pipeline) as p:
                     shape - (input_size-output_size)
             )
     )
+    
+    
+    
 '''
