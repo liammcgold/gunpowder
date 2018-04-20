@@ -30,19 +30,13 @@ prediction=gp.ArrayKey('prediction')
 grad=gp.ArrayKey('gradient')
 
 
-
-
-#300,000 is too high
-#270,750 works (30,95,95)
-
-
 #define training values
 input_shape=(60,400,400)
 voxel_size=(40,4,4)
 raw_tf = tf.placeholder(tf.float32, shape=input_shape)
 raw_batched = tf.reshape(raw_tf, (1, 1) + input_shape)
 
-#unet = mala.networks.unet(raw_batched, 12, 5, [[1,1,1],[2,4,4],[1,4,4]])
+
 unet = mala.networks.unet(raw_batched, 1, 2, [[1,1,1],[1,1,1],[1,1,1]])
 
 
@@ -62,7 +56,6 @@ labels = tf.reshape(labels_batched, output_shape)
 gt_labels = tf.placeholder(tf.float32, shape=output_shape)
 
 
-#loss_weights = tf.placeholder(tf.float32, shape=output_shape)
 
 loss = tf.losses.mean_squared_error(
     gt_labels,
@@ -111,8 +104,6 @@ snapshot_request.add(prediction,(output_shape[0]*voxel_size[0],output_shape[1]*v
 
 
 
-
-
 #define pipeline
 training_pipeline = (
         source+
@@ -154,10 +145,6 @@ request.add(gt,(output_shape[0]*voxel_size[0],output_shape[1]*voxel_size[1],outp
 
 
 
-
-
-gp.set_verbose()
-
 #Execute train
 n=1
 with gp.build(training_pipeline) as minibatch_maker:
@@ -176,76 +163,3 @@ with gp.build(training_pipeline) as minibatch_maker:
 
 
 
-
-
-
-
-
-
-
-
-'''
-
-
-                ##############
-                # Prediction #
-                ##############
-
-#we want the last itteration
-iteration=n
-
-
-
-
-
-#import the necessary data for the model and define input and output sizes
-checkpoint='unet_checkpoint_%i'%iteration
-input_size = Coordinate((84,268,268))
-output_size = Coordinate((56,56,56))
-
-
-
-
-
-#define source for prediction
-predict_source=Hdf5Source(
-                'sample_B_20160501.hdf',
-                raw='volumes/raw')
-
-
-#create pipeline
-prediction_pipeline = (
-        predict_source +
-        Normalize() +
-        Predict(checkpoint) +
-        Snapshot(
-                every=1,
-                output_dir=os.path.join('chunks', '%d'%iteration),
-                output_filename='chunk.hdf'
-        ) +
-        PrintProfilingStats() +
-                ArraySpec(
-                        input_size,
-                        output_size
-                )+
-        Snapshot(
-                every=1,
-                output_dir=os.path.join('processed', '%d'%iteration),
-                output_filename='sample_A_20160501.hdf'
-        )
-)
-
-
-# request a "batch" of the size of the whole dataset
-with build(prediction_pipeline) as p:
-    shape = p.get_spec().roi.get_shape()
-    p.request_batch(
-            ArraySpec(
-                    shape,
-                    shape - (input_size-output_size)
-            )
-    )
-    
-    
-    
-'''
