@@ -1,66 +1,54 @@
-
 from __future__ import print_function
-
-
-import numpy as np
-import random
-#USE  kill -9 $(nvidia-smi | sed -n 's/|\s*[0-9]*\s*\([0-9]*\)\s*.*/\1/p' | sort | uniq | sed '/^$/d')
 import gunpowder as gp
 from gunpowder import *
 from gunpowder.ext import malis
 import tensorflow as tf
-
-
-
-
-
-
 import mala
-from gunpowder import *
-from gunpowder.caffe import *
 
-                                                                ############
-                                                                # Training #
-                                                                ############
 
-#Declare Arrays
+
+############
+# Training #
+############
+
+# Declare Arrays
 raw = gp.ArrayKey('RAW')
 gt = gp.ArrayKey('GT')
-prediction=gp.ArrayKey('prediction')
-grad=gp.ArrayKey('gradient')
+mask= gp.ArrayKey('mask')
+prediction = gp.ArrayKey('prediction')
+grad = gp.ArrayKey('gradient')
+
+# define training values
+input_shape = (40, 300, 300)
+voxel_size = (40, 4, 4)
 
 
-#define training values
-input_shape=(60,400,400)
-voxel_size=(40,4,4)
+#define network parameters these will be used to define the feed dict for the network
 raw_tf = tf.placeholder(tf.float32, shape=input_shape)
 raw_batched = tf.reshape(raw_tf, (1, 1) + input_shape)
 
+unet = mala.networks.unet(raw_batched, 3, 3, [[1, 1, 1], [1, 1, 1], [3, 3, 3]])
 
-unet = mala.networks.unet(raw_batched, 1, 2, [[1,1,1],[1,1,1],[1,1,1]])
-
-
-
-labels_batched = mala.networks.conv_pass(
+#since we want binary predictions we will be using 1 feature map per
+output = mala.networks.conv_pass(
     unet,
     kernel_size=1,
     num_fmaps=1,
     num_repetitions=1,
-    activation='relu')
+    activation='sigmoid')
 
-output_shape_batched = labels_batched.get_shape().as_list()
-output_shape = output_shape_batched[2:]
-print(output_shape)
+#get the correct output size to compare to gt for loss
+output_shape_batched = output.get_shape().as_list()
+output_shape = output_shape_batched[2:] # strip the batch dimension
 
-labels = tf.reshape(labels_batched, output_shape)
-gt_labels = tf.placeholder(tf.float32, shape=output_shape)
+#this creates the tensor that holds the predicted binary outputs and the tensor that will be fed the real gt masks
+binary = tf.reshape(output, output_shape)
+gt_binaries = tf.placeholder(tf.float32, shape=output_shape)
 
-
-
+#deine loss to optimize
 loss = tf.losses.mean_squared_error(
-    gt_labels,
-    labels)
-
+    gt_binaries,
+    binary)
 
 tf.summary.scalar('loss_total', loss)
 
@@ -76,6 +64,9 @@ config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 
 
+
+
+
 ###############################
 # CREMI DATA IS STORED Z,X,Y  #
 #           z   x    y        #
@@ -84,82 +75,79 @@ config.gpu_options.allow_growth = True
 ###############################
 
 
-#import source
+
+
+# import source
 source = gp.Hdf5Source(
-        'data.hdf',
-        {
-            raw: 'volumes/raw',
-            gt : 'volumes/labels/neuron_ids'
-        }
-    )
+    'data_with_mask.hdf',
+    {
+        raw: 'volumes/raw',
+        gt: 'volumes/labels',
+        mask: 'volumes/masks'
+    }
+)
 
 
 
-
-#define output snapshot
+# define output snapshot
 snapshot_request = BatchRequest()
-snapshot_request.add(grad,(output_shape[0]*voxel_size[0],output_shape[1]*voxel_size[1],output_shape[2]*voxel_size[2]))
-snapshot_request.add(prediction,(output_shape[0]*voxel_size[0],output_shape[1]*voxel_size[1],output_shape[2]*voxel_size[2]))
+snapshot_request.add(grad, (
+    output_shape[0] * voxel_size[0], output_shape[1] * voxel_size[1], output_shape[2] * voxel_size[2]))
+snapshot_request.add(prediction, (
+    output_shape[0] * voxel_size[0], output_shape[1] * voxel_size[1], output_shape[2] * voxel_size[2]))
 
 
 
 
-#define pipeline
+
+# define pipeline
 training_pipeline = (
-        source+
-        gp.RandomLocation()+
-        #gp.SimpleAugment() +
-        #uses metagraph file 'unet' which contains 3D u-net
+        source +
+        gp.RandomLocation() +
+        # gp.SimpleAugment() +
+        gp.PreCache(cache_size=300, num_workers=80) +
+        # uses metagraph file 'unet' which contains 3D u-net
         gp.tensorflow.Train('unet',
                             optimizer=optimizer.name,
                             loss=loss.name,
                             save_every=100,
                             checkpoint_dir="./checkpoints/",
                             inputs={
-                                    raw_tf.name : raw,
-                                    gt_labels.name : gt
-                                    #loss_weights.name : loss_w
+                                raw_tf.name: raw,
+                                gt_binaries.name: mask,
                             },
                             outputs={
-                                    labels.name : prediction
+                                binary.name: prediction
                             },
                             gradients={
-                                    labels.name : grad
+                                unet.name: grad
                             }
-        )+
+                            ) +
+
         Snapshot({
-                    raw: 'volumes/raw',
-                    gt: 'volumes/gt',
-                    grad: 'volumes/gradient',
-                    prediction: 'volumes/prediction',
+            raw: 'volumes/raw',
+            gt: 'volumes/gt',
+            grad: 'volumes/gradient',
+            prediction: 'volumes/prediction',
         }, output_filename='batch_{id}.hdf', additional_request=snapshot_request, every=100)
 )
 
+
+
 tf.reset_default_graph()
 
-#define request
+
+
+
+# define request
 request = gp.BatchRequest()
-request.add(raw,(input_shape[0]*voxel_size[0],input_shape[1]*voxel_size[1],input_shape[2]*voxel_size[2]))
-request.add(gt,(output_shape[0]*voxel_size[0],output_shape[1]*voxel_size[1],output_shape[2]*voxel_size[2]))
+request.add(raw, (input_shape[0] * voxel_size[0], input_shape[1] * voxel_size[1], input_shape[2] * voxel_size[2]))
+request.add(gt, (output_shape[0] * voxel_size[0], output_shape[1] * voxel_size[1], output_shape[2] * voxel_size[2]))
+request.add(mask, (output_shape[0] * voxel_size[0], output_shape[1] * voxel_size[1], output_shape[2] * voxel_size[2]))
 
 
-
-
-#Execute train
-n=1
+# Execute train
+n = 100
 with gp.build(training_pipeline) as minibatch_maker:
     for i in range(n):
         minibatch_maker.request_batch(request)
-
-
-
-
-
-
-
-
-
-
-
-
-
